@@ -1,6 +1,6 @@
 #include "gamestartscene.h"
 #include "ui_gamestartscene.h"
-#include "selectscene.h"
+#include "modeselectscene.h"
 
 Gamestartscene::Gamestartscene(QWidget *parent)
     : QDialog(parent)
@@ -15,10 +15,10 @@ Gamestartscene::~Gamestartscene()
 {
     delete ui;
 }
-//进入选择界面
+//进入模式选择界面
 void Gamestartscene::on_start_clicked()
 {
-    SelectScene *w = new SelectScene();
+    ModeSelectScene *w = new ModeSelectScene();
     w -> show();
     this -> hide();
 }

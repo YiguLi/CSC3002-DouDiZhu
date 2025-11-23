@@ -17,6 +17,14 @@ enum Status {
 };
 
 /**
+ * 游戏模式枚举
+ */
+enum class GameMode {
+    SinglePlayer,       // 单机模式（1人+2AI）
+    MultiPlayer         // 联机模式（2-3真人）
+};
+
+/**
  * 游戏主控制类
  * 管理整个游戏流程
  */
@@ -33,6 +41,13 @@ public:
     void StorePlayerScore();       // 保存玩家分数
 
     Status GetStatus() const { return status; }
+    
+    // 网络模式相关
+    void SetGameMode(GameMode mode) { m_gameMode = mode; }
+    GameMode GetGameMode() const { return m_gameMode; }
+    bool IsNetworkMode() const { return m_gameMode == GameMode::MultiPlayer; }
+    void SetNetworkPlayerId(int id) { m_networkPlayerId = id; } // 设置本地玩家在网络中的ID
+    int GetNetworkPlayerId() const { return m_networkPlayerId; }
 
     // 游戏流程控制
     void CallLandlordPhase();      // 叫地主阶段
@@ -77,6 +92,10 @@ private:
     int baseScore;                 // 本局基础分
     int multiple;                  // 倍率
     int landlordCards[3];          // 三张地主牌
+    
+    // 网络模式相关
+    GameMode m_gameMode;           // 游戏模式
+    int m_networkPlayerId;         // 本地玩家在网络游戏中的ID（0=服务器，1,2=客户端）
 };
 
 

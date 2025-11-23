@@ -18,6 +18,9 @@
 InGameScene::InGameScene(QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::InGameScene)
+    , m_server(nullptr)
+    , m_client(nullptr)
+    , m_isNetworkMode(false)
 {
     ui->setupUi(this);
     this->setWindowTitle("InGame");
@@ -42,6 +45,55 @@ InGameScene::InGameScene(QWidget *parent)
     connect(ui->btn_pass, &QPushButton::clicked, this, &InGameScene::onPassClicked);
     connect(ui->btn_hint, &QPushButton::clicked, this, &InGameScene::onHintClicked);
     qDebug() << "我是新版本";
+}
+
+// 网络模式构造函数
+InGameScene::InGameScene(GameServer* server, GameClient* client, QWidget *parent)
+    : QDialog(parent)
+    , ui(new Ui::InGameScene)
+    , m_server(server)
+    , m_client(client)
+    , m_isNetworkMode(true)
+{
+    ui->setupUi(this);
+    this->setWindowTitle(server ? "InGame (房主)" : "InGame (客户端)");
+    this->setFixedSize(800, 600);
+
+    // 设置游戏为网络模式
+    m_game.SetGameMode(GameMode::MultiPlayer);
+    
+    if (m_server) {
+        m_game.SetNetworkPlayerId(0); // 服务器是玩家0
+    } else if (m_client) {
+        m_game.SetNetworkPlayerId(m_client->getMyPlayerId());
+    }
+
+    // 一开始先把出牌按钮隐藏
+    ui->btn_play->hide();
+    ui->btn_pass->hide();
+    ui->btn_hint->hide();
+
+    // 初始化网络消息处理
+    initNetworkHandlers();
+
+    // 如果是服务器，开始游戏
+    if (m_server) {
+        initGame();
+    } else {
+        // 客户端等待服务器发牌
+        setStatusText("等待服务器开始游戏...");
+    }
+
+    // 连接叫分按钮
+    connect(ui->btn_notcall, &QPushButton::clicked, this, [this]() { onCallScore(0); });
+    connect(ui->btn_1p,      &QPushButton::clicked, this, [this]() { onCallScore(1); });
+    connect(ui->btn_2p,      &QPushButton::clicked, this, [this]() { onCallScore(2); });
+    connect(ui->btn_3p,      &QPushButton::clicked, this, [this]() { onCallScore(3); });
+
+    // 连接出牌区域按钮
+    connect(ui->btn_play, &QPushButton::clicked, this, &InGameScene::onPlayClicked);
+    connect(ui->btn_pass, &QPushButton::clicked, this, &InGameScene::onPassClicked);
+    connect(ui->btn_hint, &QPushButton::clicked, this, &InGameScene::onHintClicked);
 }
 
 InGameScene::~InGameScene()
@@ -726,6 +778,146 @@ void InGameScene::showPassForPlayer(Player* player)
     m_passLabels[pid]->show();
 }
 
+// ==================== 网络游戏相关方法 ====================
 
+void InGameScene::initNetworkHandlers()
+{
+    if (m_server) {
+        connect(m_server, &GameServer::messageReceived, 
+                this, &InGameScene::onServerMessageReceived);
+    }
+    
+    if (m_client) {
+        connect(m_client, &GameClient::messageReceived,
+                this, &InGameScene::onClientMessageReceived);
+    }
+}
 
+void InGameScene::sendNetworkMessage(MessageType type, const QJsonObject& data)
+{
+    QJsonObject message;
+    message["type"] = messageTypeToString(type);
+    message["data"] = data;
+    
+    if (m_server) {
+        m_server->broadcastMessage(message);
+    } else if (m_client) {
+        m_client->sendMessage(message);
+    }
+}
 
+void InGameScene::onServerMessageReceived(int playerId, MessageType type, const QJsonObject& data)
+{
+    qDebug() << "[Server] 收到消息，玩家:" << playerId << "类型:" << messageTypeToString(type);
+    
+    // 服务器收到客户端消息后，广播给所有人
+    switch (type) {
+        case MessageType::CallLandlord:
+            // 转发叫地主消息
+            sendNetworkMessage(type, data);
+            handleNetworkCallLandlord(data);
+            break;
+            
+        case MessageType::PlayerDiscard:
+            // 转发出牌消息
+            sendNetworkMessage(type, data);
+            handleNetworkPlayerDiscard(data);
+            break;
+            
+        case MessageType::PlayerPass:
+            // 转发过牌消息
+            sendNetworkMessage(type, data);
+            handleNetworkPlayerPass(data);
+            break;
+            
+        default:
+            break;
+    }
+}
+
+void InGameScene::onClientMessageReceived(MessageType type, const QJsonObject& data)
+{
+    qDebug() << "[Client] 收到消息，类型:" << messageTypeToString(type);
+    
+    switch (type) {
+        case MessageType::DealCards:
+            handleNetworkDealCards(data);
+            break;
+            
+        case MessageType::CallLandlord:
+            handleNetworkCallLandlord(data);
+            break;
+            
+        case MessageType::LandlordConfirm:
+            handleNetworkLandlordConfirm(data);
+            break;
+            
+        case MessageType::PlayerDiscard:
+            handleNetworkPlayerDiscard(data);
+            break;
+            
+        case MessageType::PlayerPass:
+            handleNetworkPlayerPass(data);
+            break;
+            
+        case MessageType::GameOver:
+            handleNetworkGameOver(data);
+            break;
+            
+        default:
+            break;
+    }
+}
+
+void InGameScene::handleNetworkDealCards(const QJsonObject& data)
+{
+    qDebug() << "[Network] 处理发牌消息";
+    // 客户端收到服务器发牌
+    // TODO: 实现客户端接收牌的逻辑
+}
+
+void InGameScene::handleNetworkCallLandlord(const QJsonObject& data)
+{
+    int playerId = data["playerId"].toInt();
+    int score = data["score"].toInt();
+    
+    qDebug() << "[Network] 玩家" << playerId << "叫分:" << score;
+    
+    // TODO: 更新UI显示叫分结果
+}
+
+void InGameScene::handleNetworkLandlordConfirm(const QJsonObject& data)
+{
+    int landlordId = data["landlordId"].toInt();
+    
+    qDebug() << "[Network] 地主确定为玩家" << landlordId;
+    
+    // TODO: 更新UI显示地主
+}
+
+void InGameScene::handleNetworkPlayerDiscard(const QJsonObject& data)
+{
+    int playerId = data["playerId"].toInt();
+    
+    qDebug() << "[Network] 玩家" << playerId << "出牌";
+    
+    // TODO: 更新UI显示其他玩家出的牌
+}
+
+void InGameScene::handleNetworkPlayerPass(const QJsonObject& data)
+{
+    int playerId = data["playerId"].toInt();
+    
+    qDebug() << "[Network] 玩家" << playerId << "过牌";
+    
+    // TODO: 更新UI显示过牌
+}
+
+void InGameScene::handleNetworkGameOver(const QJsonObject& data)
+{
+    int winnerId = data["winnerId"].toInt();
+    
+    qDebug() << "[Network] 游戏结束，获胜者:" << winnerId;
+    
+    // TODO: 显示游戏结束界面
+}

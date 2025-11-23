@@ -7,7 +7,8 @@
 
 Game::Game() : status(NotStart), landlord(nullptr),
     curPlayer(nullptr), lastPlayer(nullptr),
-    baseScore(0), multiple(1), questioned(0), callBegin(0) {
+    baseScore(0), multiple(1), questioned(0), callBegin(0),
+    m_gameMode(GameMode::SinglePlayer), m_networkPlayerId(0) {
     for (int i = 0; i < 3; ++i) {
         players[i] = new Player(*this, i);
         callScores[i] = 0;

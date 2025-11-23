@@ -8,6 +8,7 @@
 
 #include "game.h"
 #include "cardpanel.h"
+#include "networkmanager.h"
 
 namespace Ui {
 class InGameScene;
@@ -18,7 +19,10 @@ class InGameScene : public QDialog
     Q_OBJECT
 
 public:
+    // 单机模式构造函数
     explicit InGameScene(QWidget *parent = nullptr);
+    // 网络模式构造函数
+    explicit InGameScene(GameServer* server, GameClient* client, QWidget *parent = nullptr);
     ~InGameScene();
 
 private:
@@ -59,6 +63,18 @@ private:
 
     // —— UI：更新两个 AI 的剩余牌数标签 ——
     void updateAiRemainLabels();
+    
+    // —— 网络游戏相关 ——
+    void initNetworkHandlers();
+    void sendNetworkMessage(MessageType type, const QJsonObject& data);
+    
+    // 网络消息处理
+    void handleNetworkDealCards(const QJsonObject& data);
+    void handleNetworkCallLandlord(const QJsonObject& data);
+    void handleNetworkLandlordConfirm(const QJsonObject& data);
+    void handleNetworkPlayerDiscard(const QJsonObject& data);
+    void handleNetworkPlayerPass(const QJsonObject& data);
+    void handleNetworkGameOver(const QJsonObject& data);
 
 private slots:
     // —— 叫地主按钮 ——
@@ -71,6 +87,15 @@ private slots:
     void onPlayClicked();       // 出牌
     void onPassClicked();       // 过牌
     void onHintClicked();       // 提示（后面可以完善）
+    
+    // —— 网络消息槽 ——
+    void onServerMessageReceived(int playerId, MessageType type, const QJsonObject& data);
+    void onClientMessageReceived(MessageType type, const QJsonObject& data);
+
+private:
+    GameServer* m_server;       // 服务器对象（房主模式）
+    GameClient* m_client;       // 客户端对象（客户端模式）
+    bool m_isNetworkMode;       // 是否为网络模式
 };
 
 
