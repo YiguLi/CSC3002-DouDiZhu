@@ -79,9 +79,14 @@ InGameScene::InGameScene(GameServer* server, GameClient* client, QWidget *parent
     // 如果是服务器，开始游戏
     if (m_server) {
         initGame();
+        // 稍后发送发牌消息（在客户端准备好后）
+        QTimer::singleShot(500, this, [this]() {
+            sendDealCardsToClients();
+        });
     } else {
         // 客户端等待服务器发牌
         setStatusText("等待服务器开始游戏...");
+        hideCallButtons(); // 先隐藏叫分按钮
     }
 
     // 连接叫分按钮
@@ -871,9 +876,58 @@ void InGameScene::onClientMessageReceived(MessageType type, const QJsonObject& d
 
 void InGameScene::handleNetworkDealCards(const QJsonObject& data)
 {
-    qDebug() << "[Network] 处理发牌消息";
-    // 客户端收到服务器发牌
-    // TODO: 实现客户端接收牌的逻辑
+    qDebug() << "[Client] 处理发牌消息";
+    
+    // 获取自己的手牌
+    QJsonArray myCards = data["cards"].toArray();
+    int myGamePlayerId = data["gamePlayerId"].toInt(); // 我在游戏中的ID
+    
+    qDebug() << "[Client] 收到" << myCards.size() << "张牌，游戏玩家ID:" << myGamePlayerId;
+    
+    // 清空旧UI
+    clearLastPlay();
+    qDeleteAll(m_handPanels);
+    qDeleteAll(m_landlordPanels);
+    m_handPanels.clear();
+    m_landlordPanels.clear();
+    
+    // 初始化游戏状态（不洗牌，不发牌）
+    m_game.InitGame();
+    
+    // 重要：在客户端，玩家0代表自己，但在服务器上可能是玩家1或2
+    // 所以我们将收到的牌添加到本地的玩家0
+    Player* human = m_game.GetPlayer(0);
+    if (!human) {
+        qDebug() << "[Client] 错误：玩家0不存在！";
+        return;
+    }
+    
+    // 清空原有手牌（InitGame可能给了牌）
+    human->NewGame();
+    
+    // 将服务器发的牌添加到手牌中
+    for (const QJsonValue& val : myCards) {
+        int cardId = val.toInt();
+        human->AddCard(cardId);
+    }
+    
+    qDebug() << "[Client] 手牌添加完成，当前手牌数:" << human->GetRemain();
+    
+    // 创建地主牌（背面）
+    createLandlordPanels(false);
+    
+    // 创建手牌UI
+    createPlayer0HandPanels();
+    
+    qDebug() << "[Client] 手牌UI创建完成，面板数:" << m_handPanels.size();
+    
+    // 更新AI剩余牌数（其他玩家也是17张）
+    updateAiRemainLabels();
+    
+    // 设置为叫地主阶段
+    setStatusText("游戏开始！等待叫地主...");
+    
+    qDebug() << "[Client] 发牌处理完成！";
 }
 
 void InGameScene::handleNetworkCallLandlord(const QJsonObject& data)
@@ -920,4 +974,48 @@ void InGameScene::handleNetworkGameOver(const QJsonObject& data)
     qDebug() << "[Network] 游戏结束，获胜者:" << winnerId;
     
     // TODO: 显示游戏结束界面
+}
+
+void InGameScene::sendDealCardsToClients()
+{
+    if (!m_server) return;
+    
+    qDebug() << "[Server] 发送发牌消息给所有客户端";
+    
+    // 获取当前连接的客户端数量
+    int clientCount = m_server->getConnectedPlayerCount();
+    qDebug() << "[Server] 当前连接的客户端数量:" << clientCount;
+    
+    // 遍历所有玩家，给每个客户端发送各自的手牌
+    // 注意：服务器自己是玩家0，客户端是玩家1和2
+    for (int gamePlayerId = 1; gamePlayerId <= 2; ++gamePlayerId) {
+        Player* player = m_game.GetPlayer(gamePlayerId);
+        if (!player) {
+            qDebug() << "[Server] 玩家" << gamePlayerId << "不存在，跳过";
+            continue;
+        }
+        
+        const std::multiset<int>& cards = player->GetCards();
+        
+        QJsonArray cardArray;
+        for (int cardId : cards) {
+            cardArray.append(cardId);
+        }
+        
+        QJsonObject data;
+        data["cards"] = cardArray;
+        data["gamePlayerId"] = gamePlayerId; // 游戏中的玩家ID
+        data["cardCount"] = (int)cards.size();
+        
+        QJsonObject message;
+        message["type"] = messageTypeToString(MessageType::DealCards);
+        message["data"] = data;
+        
+        // 发送给对应的客户端（网络ID = 游戏ID）
+        m_server->sendToClient(gamePlayerId, message);
+        
+        qDebug() << "[Server] 发送" << cards.size() << "张牌给游戏玩家" << gamePlayerId;
+    }
+    
+    qDebug() << "[Server] 所有发牌消息已发送";
 }

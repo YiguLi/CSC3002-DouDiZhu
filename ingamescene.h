@@ -67,6 +67,7 @@ private:
     // —— 网络游戏相关 ——
     void initNetworkHandlers();
     void sendNetworkMessage(MessageType type, const QJsonObject& data);
+    void sendDealCardsToClients(); // 服务器向客户端发送发牌消息
     
     // 网络消息处理
     void handleNetworkDealCards(const QJsonObject& data);
