@@ -4,6 +4,7 @@
 #include "lobbyroom.h"
 #include "networkmanager.h"
 #include "game.h"
+#include "ingamescene.h"
 #include <QMessageBox>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -86,21 +87,14 @@ void Gamestartscene::on_online_clicked()
         // 启动游戏
         game->GameStart();
         
-        // 提示：需要修改IngameScene以支持外部Game实例
-        // 目前IngameScene使用内部m_game成员，需要重构才能完全集成
-        // 这里先显示一个提示
-        QMessageBox::information(nullptr, "联机游戏已开始", 
-            QString("联机游戏已启动！\n玩家ID: %1\n使用AI: %2\n\n注意：完整集成需要修改IngameScene以使用外部Game实例。")
-            .arg(networkManager->GetLocalPlayerId())
-            .arg(useAI ? "是" : "否"));
+        // 创建游戏界面（使用外部Game实例）
+        InGameScene* gameScene = new InGameScene(game);
+        gameScene->show();
         
-        // TODO: 创建游戏界面（需要重构IngameScene）
-        // IngameScene* gameScene = new IngameScene();
-        // gameScene->show();
-        
-        // 暂时不关闭，让用户可以继续操作
-        // lobby->close();
-        // this->close();
+        // 关闭房间和主菜单
+        lobby->close();
+        lobby->deleteLater();
+        this->close();
     });
     
     // 处理返回主菜单

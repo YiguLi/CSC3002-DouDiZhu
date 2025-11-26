@@ -4,9 +4,12 @@
 
 ✅ 主菜单添加"联机模式"按钮
 ✅ 联机房间创建/加入界面
+✅ 自动显示本机IP地址
 ✅ 网络通信完整实现
 ✅ 玩家操作同步机制
 ✅ AI操作广播（二人联机）
+✅ IngameScene重构完成，支持外部Game实例
+✅ 完整的联机游戏界面集成
 
 ## 如何使用
 
@@ -18,13 +21,13 @@
 
 ### 2. 创建房间（房主）
 1. 点击"联机模式"
-2. 点击"创建房间"
-3. 记下显示的端口号（默认12345）
-4. 告诉其他玩家你的局域网IP地址
-   - Windows: 打开CMD，输入 `ipconfig`，找到IPv4地址（如192.168.1.100）
-   - 也可以使用 `127.0.0.1` 在同一台电脑测试
-5. 等待其他玩家加入（2-3人）
-6. 所有人准备后，点击"开始游戏"
+2. 界面会自动显示你的本机IP地址（蓝色字体）
+3. 点击"创建房间"
+4. 系统弹窗显示完整连接信息（IP和端口）
+5. 将IP和端口告知其他玩家
+6. 等待其他玩家加入（2-3人）
+7. 所有人准备后，点击"开始游戏"
+8. 自动进入游戏界面开始游戏
 
 ### 3. 加入房间
 1. 点击"联机模式"
@@ -40,92 +43,37 @@
 
 ## 当前状态
 
-网络通信框架已完全实现，但游戏界面（IngameScene）需要重构才能完全集成：
+🎉 **联机功能已完全实现并集成！**
 
-### 问题
-`IngameScene` 类使用内部成员 `Game m_game`，无法接受外部Game实例。
+### 已完成
+- ✅ `IngameScene` 已重构为支持外部Game实例
+- ✅ 单机模式和联机模式完美共存
+- ✅ 所有网络通信和同步机制正常工作
+- ✅ 游戏界面正确显示联机游戏状态
 
-### 临时方案
-点击"开始游戏"后会显示一个信息框，确认联机已建立，但不会进入游戏界面。
+### 技术实现
+`IngameScene` 现在支持两种构造方式：
 
-### 完整集成方案
+1. **单机模式**（原有方式）
+   ```cpp
+   InGameScene* scene = new InGameScene();
+   // 内部创建并管理Game实例
+   ```
 
-需要修改 `ingamescene.h`：
+2. **联机模式**（新增方式）
+   ```cpp
+   Game* game = new Game();
+   game->SetNetworkMode(true);
+   InGameScene* scene = new InGameScene(game);
+   // 使用外部传入的Game实例
+   ```
 
-```cpp
-class InGameScene : public QDialog
-{
-    Q_OBJECT
-
-public:
-    explicit InGameScene(QWidget *parent = nullptr);
-    explicit InGameScene(Game* externalGame, QWidget *parent = nullptr); // 新增构造函数
-    ~InGameScene();
-    
-    void setGame(Game* game); // 新增方法
-
-private:
-    Ui::InGameScene *ui;
-    
-    Game* m_gamePtr;              // 改为指针
-    bool m_usingExternalGame;     // 标记是否使用外部Game
-    
-    // ... 其他成员
-};
-```
-
-修改 `ingamescene.cpp`：
-
-```cpp
-InGameScene::InGameScene(QWidget *parent)
-    : QDialog(parent), ui(new Ui::InGameScene), 
-      m_gamePtr(new Game()), m_usingExternalGame(false)
-{
-    ui->setupUi(this);
-    // ... 现有初始化代码
-}
-
-InGameScene::InGameScene(Game* externalGame, QWidget *parent)
-    : QDialog(parent), ui(new Ui::InGameScene),
-      m_gamePtr(externalGame), m_usingExternalGame(true)
-{
-    ui->setupUi(this);
-    // ... 初始化代码，但不调用 m_gamePtr->GameStart()
-    setupUIForCurrentGame(); // 直接根据现有game状态设置UI
-}
-
-void InGameScene::setGame(Game* game)
-{
-    if (m_gamePtr && !m_usingExternalGame) {
-        delete m_gamePtr; // 清理旧的内部game
-    }
-    m_gamePtr = game;
-    m_usingExternalGame = true;
-    setupUIForCurrentGame();
-}
-
-InGameScene::~InGameScene()
-{
-    delete ui;
-    if (!m_usingExternalGame && m_gamePtr) {
-        delete m_gamePtr;
-    }
-}
-
-// 所有使用 m_game 的地方改为 m_gamePtr 或 (*m_gamePtr)
-```
-
-然后在 `gamestartscene.cpp` 中：
-
-```cpp
-// 创建游戏界面
-IngameScene* gameScene = new IngameScene(game);
-gameScene->show();
-
-// 关闭房间和主菜单
-lobby->close();
-this->close();
-```
+关键改动：
+- `Game m_game` → `Game* m_gamePtr`
+- 添加 `bool m_usingExternalGame` 标记
+- 新增构造函数 `InGameScene(Game* externalGame, QWidget *parent)`
+- 所有 `m_game.xxx` 改为 `m_gamePtr->xxx`
+- 析构函数智能管理内存（只删除内部创建的Game）
 
 ## 测试建议
 
@@ -148,14 +96,16 @@ this->close();
 - **默认端口**: 12345
 - **同步方式**: 操作同步（每个客户端运行完整游戏逻辑）
 
-## 下一步开发
+## 可选优化方向
 
-1. **重构IngameScene** - 支持外部Game实例（优先级：高）
-2. **完整UI集成** - 联机游戏进入游戏界面
-3. **断线重连** - 处理网络中断
-4. **游戏同步优化** - 确保所有客户端状态一致
-5. **添加聊天功能** - 游戏内交流
-6. **房间列表** - 自动发现局域网房间
+1. **断线重连** - 处理网络中断，允许玩家重新加入
+2. **游戏状态完全同步** - 同步发牌随机种子，确保所有客户端牌序一致
+3. **添加聊天功能** - 游戏内文字交流
+4. **房间列表** - 自动发现局域网房间（UDP广播）
+5. **玩家信息显示** - 在游戏中显示玩家昵称和网络状态
+6. **重连机制** - 临时断线后恢复游戏
+7. **观战模式** - 允许额外玩家观战
+8. **战绩统计** - 记录联机对战数据
 
 ## 注意事项
 

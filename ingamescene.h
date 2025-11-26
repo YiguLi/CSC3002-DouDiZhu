@@ -19,12 +19,16 @@ class InGameScene : public QDialog
 
 public:
     explicit InGameScene(QWidget *parent = nullptr);
+    explicit InGameScene(Game* externalGame, QWidget *parent = nullptr); // 新增：使用外部Game
     ~InGameScene();
+    
+    void setGame(Game* game); // 设置外部Game实例
 
 private:
     Ui::InGameScene *ui;
 
-    Game m_game;                         // 当前这局游戏逻辑对象
+    Game* m_gamePtr;                     // 改为指针
+    bool m_usingExternalGame;            // 标记是否使用外部Game
     QVector<CardPanel*> m_handPanels;    // 玩家 0 手牌
     QVector<CardPanel*> m_landlordPanels;// 地主 3 张牌
     QVector<CardPanel*> m_lastPlayPanels[3];  // 0=玩家, 1=AI1, 2=AI2，每人一组出牌区
@@ -59,6 +63,9 @@ private:
 
     // —— UI：更新两个 AI 的剩余牌数标签 ——
     void updateAiRemainLabels();
+    
+    // —— 辅助方法：获取Game引用 ——
+    Game& game() { return *m_gamePtr; }
 
 private slots:
     // —— 叫地主按钮 ——
