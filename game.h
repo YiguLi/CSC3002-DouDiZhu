@@ -48,6 +48,7 @@ public:
     bool IsNetworkMode() const { return m_gameMode == GameMode::MultiPlayer; }
     void SetNetworkPlayerId(int id) { m_networkPlayerId = id; } // 设置本地玩家在网络中的ID
     int GetNetworkPlayerId() const { return m_networkPlayerId; }
+    void SetupNetworkPlayers(int localPlayerId, int totalPlayers = 3); // 设置网络模式下玩家类型和名称
 
     // 游戏流程控制
     void CallLandlordPhase();      // 叫地主阶段

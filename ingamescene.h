@@ -63,6 +63,7 @@ private:
 
     // —— UI：更新两个 AI 的剩余牌数标签 ——
     void updateAiRemainLabels();
+    void updatePlayerNameLabels(); // 更新玩家名称显示
     
     // —— 网络游戏相关 ——
     void initNetworkHandlers();
@@ -97,6 +98,8 @@ private:
     GameServer* m_server;       // 服务器对象（房主模式）
     GameClient* m_client;       // 客户端对象（客户端模式）
     bool m_isNetworkMode;       // 是否为网络模式
+    int m_localPlayerId;        // 本地玩家在网络中的ID (0=服务器, 1,2=客户端)
+    QString m_playerNames[3];   // 三个玩家的名称
 };
 
 

@@ -4,7 +4,14 @@
 #include <iostream>
 
 Player::Player(Game& game, int id)
-    : game(game), playerId(id), score(0) {}
+    : game(game), playerId(id), score(0), isAI(id > 0) {
+    // 默认名称
+    if (id == 0) {
+        playerName = "玩家";
+    } else {
+        playerName = "电脑" + std::to_string(id);
+    }
+}
 
 void Player::NewGame() {
     cards.clear();
@@ -23,14 +30,13 @@ int Player::GetRemain() const {
 }
 
 std::string Player::GetName() const {
-    if (playerId == 0) return "玩家";
-    return "电脑" + std::to_string(playerId);
+    return playerName;
 }
 
 // 叫地主逻辑
 int Player::CallLandlord(int questioned, int maxScore) {
-    if (playerId == 0) {
-        // 人类玩家,由外部输入决定
+    if (!isAI) {
+        // 非AI玩家（人类或网络玩家）,由外部输入决定
         return -1;  // 需要外部输入
     }
 
@@ -556,7 +562,8 @@ std::vector<CardGroup> Player::FindPlayableCards(const CardGroup& target) const 
 }
 
 bool Player::Discard() {
-    if (playerId == 0) {
+    if (!isAI) {
+        // 非AI玩家（人类或网络玩家）使用HumanDiscard
         bool ok = HumanDiscard();
         if (ok) { passed = false; }
         return ok;

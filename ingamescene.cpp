@@ -22,10 +22,16 @@ InGameScene::InGameScene(QWidget *parent)
     , m_server(nullptr)
     , m_client(nullptr)
     , m_isNetworkMode(false)
+    , m_localPlayerId(0)
 {
     ui->setupUi(this);
     this->setWindowTitle("InGame");
     this->setFixedSize(800, 600);
+    
+    // 单机模式下的默认名称
+    m_playerNames[0] = QString::fromStdString("玩家");
+    m_playerNames[1] = QString::fromStdString("AI 1");
+    m_playerNames[2] = QString::fromStdString("AI 2");
 
     // 一开始先把出牌按钮隐藏（只在出牌阶段 / 玩家回合显示）
     ui->btn_play->hide();
@@ -34,6 +40,7 @@ InGameScene::InGameScene(QWidget *parent)
 
     // 开一局游戏（洗牌 + 发牌 + 设置叫地主起始玩家）
     initGame();
+    updatePlayerNameLabels();
 
     // 连接叫分按钮
     connect(ui->btn_notcall, &QPushButton::clicked, this, [this]() { onCallScore(0); });
@@ -64,9 +71,25 @@ InGameScene::InGameScene(GameServer* server, GameClient* client, QWidget *parent
     m_game.SetGameMode(GameMode::MultiPlayer);
     
     if (m_server) {
-        m_game.SetNetworkPlayerId(0); // 服务器是玩家0
+        m_localPlayerId = 0; // 服务器是玩家0
+        m_game.SetNetworkPlayerId(0);
     } else if (m_client) {
-        m_game.SetNetworkPlayerId(m_client->getMyPlayerId());
+        m_localPlayerId = m_client->getMyPlayerId();
+        m_game.SetNetworkPlayerId(m_localPlayerId);
+    }
+    
+    // 获取总玩家数（服务器 + 客户端数量）
+    int totalPlayers = 3; // 默认3人
+    if (m_server) {
+        totalPlayers = 1 + m_server->getConnectedPlayerCount(); // 服务器自己 + 客户端数量
+    }
+    
+    // 设置网络模式下的玩家类型和名称
+    m_game.SetupNetworkPlayers(m_localPlayerId, totalPlayers);
+    
+    // 初始化玩家名称（后续会通过网络消息更新）
+    for (int i = 0; i < 3; ++i) {
+        m_playerNames[i] = QString::fromStdString(m_game.GetPlayer(i)->GetName());
     }
 
     // 一开始先把出牌按钮隐藏
@@ -121,6 +144,19 @@ void InGameScene::initGame()
     // 重新开局：洗牌 + 发牌 + 设置叫地主起始玩家
     qDebug() << "===== GameStart() 新一局 =====";
     m_game.GameStart();
+    
+    // 如果是网络模式，确保玩家类型正确设置
+    if (m_isNetworkMode) {
+        int totalPlayers = 3;
+        if (m_server) {
+            totalPlayers = 1 + m_server->getConnectedPlayerCount();
+        }
+        m_game.SetupNetworkPlayers(m_localPlayerId, totalPlayers);
+        // 更新玩家名称
+        for (int i = 0; i < 3; ++i) {
+            m_playerNames[i] = QString::fromStdString(m_game.GetPlayer(i)->GetName());
+        }
+    }
 
     // 根据当前 game 状态重建 UI
     setupUIForCurrentGame();
@@ -137,6 +173,9 @@ void InGameScene::setupUIForCurrentGame()
 
     // 3. 更新 AI 剩余牌数（初始都是 17）
     updateAiRemainLabels();
+    
+    // 3.5 更新玩家名称显示
+    updatePlayerNameLabels();
 
     // 4. 让 AI 先叫到轮到玩家 0 为止
     while (m_game.GetStatus() == Status::GetLandlord &&
@@ -341,9 +380,9 @@ void InGameScene::enterDiscardPhase()
         return;
     }
 
-    // AI 回合（加 2 秒延迟）
-    qDebug() << "轮到 AI" << cur->GetId() << " 出牌，2 秒后执行";
-    setStatusText(QString("Status： AI%1 Play…").arg(cur->GetId()));
+    // 其他玩家回合（AI或网络玩家，加 2 秒延迟）
+    qDebug() << "轮到" << QString::fromStdString(cur->GetName()) << " 出牌，2 秒后执行";
+    setStatusText(QString("Status： %1 Play…").arg(QString::fromStdString(cur->GetName())));
     ui->btn_play->hide();
     ui->btn_pass->hide();
     ui->btn_hint->hide();
@@ -640,6 +679,19 @@ void InGameScene::updateAiRemainLabels()
     qDebug() << "updateAiRemainLabels: AI1 =" << r1 << ", AI2 =" << r2;
 }
 
+void InGameScene::updatePlayerNameLabels()
+{
+    if (!ui) return;
+    
+    // 更新左边玩家名称 (玩家1)
+    ui->label_status_2->setText(m_playerNames[1]);
+    
+    // 更新右边玩家名称 (玩家2)
+    ui->label_status_3->setText(m_playerNames[2]);
+    
+    qDebug() << "更新玩家名称: Player1=" << m_playerNames[1] << ", Player2=" << m_playerNames[2];
+}
+
 void InGameScene::onPlayClicked()
 {
     // 收集当前选中的牌（UI 顺序索引）
@@ -895,6 +947,17 @@ void InGameScene::handleNetworkDealCards(const QJsonObject& data)
     // 初始化游戏状态（不洗牌，不发牌）
     m_game.InitGame();
     
+    // 获取总玩家数（从服务器消息中获取，如果有的话）
+    int totalPlayers = data.contains("totalPlayers") ? data["totalPlayers"].toInt() : 3;
+    
+    // 设置网络模式下的玩家类型
+    m_game.SetupNetworkPlayers(myGamePlayerId, totalPlayers);
+    
+    // 更新玩家名称
+    for (int i = 0; i < 3; ++i) {
+        m_playerNames[i] = QString::fromStdString(m_game.GetPlayer(i)->GetName());
+    }
+    
     // 重要：在客户端，玩家0代表自己，但在服务器上可能是玩家1或2
     // 所以我们将收到的牌添加到本地的玩家0
     Player* human = m_game.GetPlayer(0);
@@ -924,6 +987,9 @@ void InGameScene::handleNetworkDealCards(const QJsonObject& data)
     
     // 更新AI剩余牌数（其他玩家也是17张）
     updateAiRemainLabels();
+    
+    // 更新玩家名称显示
+    updatePlayerNameLabels();
     
     // 设置为叫地主阶段
     setStatusText("游戏开始！等待叫地主...");
@@ -985,11 +1051,12 @@ void InGameScene::sendDealCardsToClients()
     
     // 获取当前连接的客户端数量
     int clientCount = m_server->getConnectedPlayerCount();
-    qDebug() << "[Server] 当前连接的客户端数量:" << clientCount;
+    int totalPlayers = 1 + clientCount; // 服务器 + 客户端
+    qDebug() << "[Server] 当前连接的客户端数量:" << clientCount << "，总玩家数:" << totalPlayers;
     
     // 遍历所有玩家，给每个客户端发送各自的手牌
-    // 注意：服务器自己是玩家0，客户端是玩家1和2
-    for (int gamePlayerId = 1; gamePlayerId <= 2; ++gamePlayerId) {
+    // 注意：服务器自己是玩家0，客户端是玩家1（和玩家2，如果有的话）
+    for (int gamePlayerId = 1; gamePlayerId <= clientCount; ++gamePlayerId) {
         Player* player = m_game.GetPlayer(gamePlayerId);
         if (!player) {
             qDebug() << "[Server] 玩家" << gamePlayerId << "不存在，跳过";
@@ -1007,6 +1074,7 @@ void InGameScene::sendDealCardsToClients()
         data["cards"] = cardArray;
         data["gamePlayerId"] = gamePlayerId; // 游戏中的玩家ID
         data["cardCount"] = (int)cards.size();
+        data["totalPlayers"] = totalPlayers; // 总玩家数
         
         QJsonObject message;
         message["type"] = messageTypeToString(MessageType::DealCards);

@@ -26,6 +26,11 @@ public:
     int GetRemain() const;             // 获取剩余牌数
     int GetScore() const { return score; }
     void AddScore(int s) { score += s; }
+    
+    // 玩家类型和名称
+    bool IsAI() const { return isAI; }
+    void SetAI(bool ai) { isAI = ai; }
+    void SetName(const std::string& name) { playerName = name; }
 
     // 叫地主相关
     int CallLandlord(int questioned, int maxScore);
@@ -60,6 +65,8 @@ private:
     Game& game;
     int playerId;                      // 玩家ID: 0=人类, 1=电脑1, 2=电脑2
     int score;                         // 玩家分数
+    bool isAI;                         // 是否为AI（单机模式下ID>0为AI，联机模式根据网络身份判断）
+    std::string playerName;            // 玩家名称
     std::multiset<int> cards;          // 手牌（允许重复，例如有两张3）
     CardGroup selection;               // 选中的牌
     CardGroup discard;                 // 打出的牌

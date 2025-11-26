@@ -67,6 +67,44 @@ void Game::GameStart() {
     status = Status::GetLandlord;
 }
 
+void Game::SetupNetworkPlayers(int localPlayerId, int totalPlayers) {
+    // 在网络模式下，设置玩家类型和名称
+    // localPlayerId 是本地玩家在网络游戏中的ID (0=服务器, 1,2=客户端)
+    // totalPlayers 是总玩家数 (2或3)
+    
+    qDebug() << "[SetupNetworkPlayers] localPlayerId=" << localPlayerId << ", totalPlayers=" << totalPlayers;
+    
+    for (int i = 0; i < 3; ++i) {
+        if (i == 0) {
+            // 本地玩家总是以玩家0的身份存在
+            players[i]->SetAI(false);
+            players[i]->SetName("Player " + std::to_string(localPlayerId + 1));
+            qDebug() << "  玩家" << i << ": 本地玩家 (Player " << (localPlayerId + 1) << ")";
+        } else {
+            // 计算实际网络玩家ID (从本地玩家的视角看)
+            int networkId = (localPlayerId + i) % 3;
+            
+            // 判断这个位置是否是AI
+            // 当只有2个真人玩家时，networkId=2的位置是AI
+            if (totalPlayers == 2 && networkId == 2) {
+                players[i]->SetAI(true);
+                players[i]->SetName("AI");
+                qDebug() << "  玩家" << i << ": AI (网络ID=" << networkId << ")";
+            } else if (networkId < totalPlayers) {
+                // 其他位置是真人网络玩家
+                players[i]->SetAI(false);
+                players[i]->SetName("Player " + std::to_string(networkId + 1));
+                qDebug() << "  玩家" << i << ": 网络玩家 (Player " << (networkId + 1) << ")";
+            } else {
+                // 理论上不应该到这里
+                players[i]->SetAI(true);
+                players[i]->SetName("AI");
+                qDebug() << "  玩家" << i << ": AI (默认，networkId=" << networkId << ")";
+            }
+        }
+    }
+}
+
 void Game::LoadPlayerScore() {
     std::ifstream fin("data");
     if (fin.is_open()) {
@@ -98,13 +136,13 @@ void Game::CallLandlordPhase() {
         curPlayer = players[callBegin];
     }
 
-    // 如果当前玩家是人类,等待输入,不在这里处理
-    if (curPlayer->GetId() == 0) {
+    // 如果当前玩家不是AI（人类或网络玩家）,等待输入,不在这里处理
+    if (!curPlayer->IsAI()) {
         return;
     }
 
     // AI玩家自动叫地主
-    if (curPlayer->GetId() != 0) {
+    if (curPlayer->IsAI()) {
         int maxScore = 0;
         for (int i = 0; i < questioned; ++i) {
             if (callScores[i] > maxScore) {
