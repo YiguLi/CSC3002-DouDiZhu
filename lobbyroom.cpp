@@ -2,6 +2,8 @@
 #include "networkmanager.h"
 #include <QMessageBox>
 #include <QGroupBox>
+#include <QNetworkInterface>
+#include <QHostAddress>
 
 LobbyRoom::LobbyRoom(QWidget* parent)
     : QWidget(parent), networkManager(nullptr), isReady(false) {
@@ -40,6 +42,17 @@ void LobbyRoom::SetupUI() {
     titleLabel->setFont(titleFont);
     titleLabel->setAlignment(Qt::AlignCenter);
     lobbyLayout->addWidget(titleLabel);
+    
+    // 显示本机IP地址
+    labelLocalIP = new QLabel(lobbyWidget);
+    labelLocalIP->setAlignment(Qt::AlignCenter);
+    QString localIP = GetLocalIPAddress();
+    labelLocalIP->setText(QString("本机IP: %1").arg(localIP));
+    QFont ipFont = labelLocalIP->font();
+    ipFont.setPointSize(12);
+    labelLocalIP->setFont(ipFont);
+    labelLocalIP->setStyleSheet("QLabel { color: #2196F3; }");
+    lobbyLayout->addWidget(labelLocalIP);
     
     lobbyLayout->addSpacing(30);
     
@@ -225,15 +238,16 @@ void LobbyRoom::OnStartGameClicked() {
 
 void LobbyRoom::OnRoomCreated(int port) {
     ShowRoomView();
-    labelRoomInfo->setText(QString("房间已创建 - 端口: %1\n等待其他玩家加入...").arg(port));
+    QString localIP = GetLocalIPAddress();
+    labelRoomInfo->setText(QString("房间已创建\nIP: %1 | 端口: %2\n等待其他玩家加入...").arg(localIP).arg(port));
     btnStartGame->setEnabled(true);  // 房主可以开始游戏
     
     // 添加自己到玩家列表
     playerListWidget->clear();
     playerListWidget->addItem("玩家0 (房主-我) [准备]");
     
-    QMessageBox::information(this, "成功", 
-        QString("房间创建成功！\n其他玩家可通过以下信息加入:\nIP: (您的局域网IP)\n端口: %1").arg(port));
+    QMessageBox::information(this, "房间创建成功", 
+        QString("房间创建成功！\n\n其他玩家可通过以下信息加入:\nIP地址: %1\n端口: %2\n\n请告知其他玩家上述信息。").arg(localIP).arg(port));
 }
 
 void LobbyRoom::OnRoomJoined() {
@@ -296,4 +310,27 @@ void LobbyRoom::UpdatePlayerList() {
             playerListWidget->addItem(QString("玩家%1").arg(i));
         }
     }
+}
+
+QString LobbyRoom::GetLocalIPAddress() {
+    QString ipAddress;
+    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+    
+    // 优先查找局域网IPv4地址（192.168.x.x 或 10.x.x.x）
+    for (const QHostAddress& address : ipAddressesList) {
+        if (address != QHostAddress::LocalHost && address.toIPv4Address()) {
+            QString ip = address.toString();
+            // 优先返回192.168或10开头的地址
+            if (ip.startsWith("192.168.") || ip.startsWith("10.")) {
+                return ip;
+            }
+            // 保存第一个非本地IPv4地址作为备选
+            if (ipAddress.isEmpty()) {
+                ipAddress = ip;
+            }
+        }
+    }
+    
+    // 如果没找到，返回备选地址或本地地址
+    return ipAddress.isEmpty() ? "127.0.0.1" : ipAddress;
 }

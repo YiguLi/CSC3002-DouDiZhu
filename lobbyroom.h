@@ -48,6 +48,7 @@ private:
     void ShowLobbyView();          // 显示大厅视图（创建/加入房间）
     void ShowRoomView();           // 显示房间视图（等待开始）
     void UpdatePlayerList();
+    QString GetLocalIPAddress();   // 获取本机IP地址
     
     NetworkManager* networkManager;
     
@@ -58,6 +59,7 @@ private:
     QLineEdit* editHostIP;
     QLineEdit* editPort;
     QPushButton* btnBack;
+    QLabel* labelLocalIP;          // 显示本机IP
     
     // 房间视图控件
     QWidget* roomWidget;
