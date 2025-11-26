@@ -144,7 +144,8 @@ void NetworkManager::StartGame() {
     gameStarted = true;
     
     qDebug() << "[NetworkManager] 游戏开始，使用AI:" << useAI;
-    // 注意：房主会在外部lambda中调用GameStart，然后调用BroadcastGameState
+    // 房主也需要发出gameStartRequested信号来触发游戏界面
+    emit gameStartRequested();
 }
 
 void NetworkManager::SendCallLandlord(int playerId, int score) {
