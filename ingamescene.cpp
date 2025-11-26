@@ -9,8 +9,9 @@
 #include <QPropertyAnimation>
 #include <QEasingCurve>
 #include <QAbstractAnimation>
-
-
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 #include "winscene.h"
 #include "losescene.h"
