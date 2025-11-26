@@ -398,8 +398,9 @@ void NetworkManager::HandleGameStart(QTcpSocket* socket, const QJsonObject& mess
     useAI = message["useAI"].toBool();
     gameStarted = true;
     
-    qDebug() << "[NetworkManager] 收到游戏开始消息，使用AI:" << useAI << "，等待游戏状态同步...";
-    // 客户端不立即发出gameStartRequested，而是等待MSG_GAME_STATE
+    qDebug() << "[NetworkManager] 收到游戏开始消息，使用AI:" << useAI;
+    // 客户端发出gameStartRequested信号，触发界面准备，然后等待MSG_GAME_STATE同步游戏状态
+    emit gameStartRequested();
 }
 
 void NetworkManager::HandleCallLandlord(QTcpSocket* socket, const QJsonObject& message) {
