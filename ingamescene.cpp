@@ -156,11 +156,35 @@ InGameScene::InGameScene(Game* externalGame, QWidget *parent)
 
     
 
-    // 设置定时器定期检查游戏状态态（用于网络模式的UI更新）
+    // 设置定时器定期检查游戏状态（用于网络模式的UI更新）
 
     QTimer* updateTimer = new QTimer(this);
 
-    connect(updateTimer, &QTimer::timeout, this, [this]() {
+    connect(updateTimer, &QTimer::timeout, this, [this, updateTimer]() {
+
+        // 检查是否需要发地主牌
+
+        if (m_gamePtr->GetStatus() == Status::SendLandlordCard && m_gamePtr->GetLandlord()) {
+
+            qDebug() << "[Timer] Detected SendLandlordCard state, executing";
+
+            m_gamePtr->SendLandlordCard();
+
+            createLandlordPanels(true);
+
+            refreshPlayer0HandPanels();
+
+            hideCallButtons();
+
+            enterDiscardPhase();
+
+            updateTimer->stop();  // 停止定时器
+
+            return;
+
+        }
+
+        
 
         // 检查是否需要更新UI
 
@@ -401,6 +425,14 @@ void InGameScene::setupUIForCurrentGame()
                         if (m_gamePtr->GetStatus() == Status::GetLandlord) {
 
                             m_gamePtr->CallLandlordPhase();
+
+                            // 继续检查是否还有AI需要叫地主
+
+                            if (m_gamePtr->GetStatus() == Status::GetLandlord) {
+
+                                setupUIForCurrentGame();
+
+                            }
 
                         }
 
@@ -1350,7 +1382,17 @@ void InGameScene::updateAiRemainLabels()
 
 
 
-    qDebug() << "updateAiRemainLabels: AI1 =" << r1 << ", AI2 =" << r2;
+    // 只在数值变化时输出调试信息
+
+    if (r1 != m_lastAI1Remain || r2 != m_lastAI2Remain) {
+
+        qDebug() << "[updateAiRemainLabels] AI1 =" << r1 << ", AI2 =" << r2;
+
+        m_lastAI1Remain = r1;
+
+        m_lastAI2Remain = r2;
+
+    }
 
 }
 

@@ -33,9 +33,12 @@ private:
     QVector<CardPanel*> m_landlordPanels;// 地主 3 张牌
     QVector<CardPanel*> m_lastPlayPanels[3];  // 0=玩家, 1=AI1, 2=AI2，每人一组出牌区
 
-    QLabel* m_passLabels[3] = { nullptr, nullptr, nullptr }; // “不出”文字
+    QLabel* m_passLabels[3] = { nullptr, nullptr, nullptr }; // "不出"文字
     double m_lastPlayScale = 0.7;                             // 出牌区牌的缩放比例（比手牌小一点）
 
+    // 用于减少日志输出的缓存
+    int m_lastAI1Remain = -1;
+    int m_lastAI2Remain = -1;
 
     // —— 初始化 UI & 游戏逻辑 ——
     void initGame();                     // 开局/重开一局（洗牌 + 发牌 + 进入叫地主阶段）
