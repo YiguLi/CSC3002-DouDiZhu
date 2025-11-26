@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <iostream>
 
-Player::Player(Game& game, int id)
-    : game(game), playerId(id), score(0) {}
+Player::Player(Game& game, int id, PlayerType type)
+    : game(game), playerId(id), playerType(type), score(0) {}
 
 void Player::NewGame() {
     cards.clear();
@@ -23,15 +23,21 @@ int Player::GetRemain() const {
 }
 
 std::string Player::GetName() const {
-    if (playerId == 0) return "玩家";
-    return "电脑" + std::to_string(playerId);
+    if (playerType == LocalPlayer) return "本地玩家";
+    if (playerType == NetworkPlayer) return "网络玩家" + std::to_string(playerId);
+    return "AI玩家" + std::to_string(playerId);
 }
 
 // 叫地主逻辑
 int Player::CallLandlord(int questioned, int maxScore) {
-    if (playerId == 0) {
-        // 人类玩家,由外部输入决定
+    if (playerType == LocalPlayer) {
+        // 本地玩家,由外部输入决定
         return -1;  // 需要外部输入
+    }
+    
+    if (playerType == NetworkPlayer) {
+        // 网络玩家,等待网络消息
+        return -1;
     }
 
     // AI简单逻辑: 根据手牌质量决定
@@ -556,12 +562,18 @@ std::vector<CardGroup> Player::FindPlayableCards(const CardGroup& target) const 
 }
 
 bool Player::Discard() {
-    if (playerId == 0) {
+    if (playerType == LocalPlayer) {
         bool ok = HumanDiscard();
         if (ok) { passed = false; }
         return ok;
     }
+    
+    if (playerType == NetworkPlayer) {
+        // 网络玩家,等待网络消息,不在此处出牌
+        return false;
+    }
 
+    // AI玩家自动出牌
     AISelectCards();
 
     if (selection.count == 0) {

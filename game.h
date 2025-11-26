@@ -5,6 +5,8 @@
 #include "cards.h"
 #include "player.h"
 
+class NetworkManager;
+
 /**
  * 游戏状态枚举
  */
@@ -31,6 +33,18 @@ public:
     void InitGame();               // 初始化游戏
     void LoadPlayerScore();        // 加载玩家分数
     void StorePlayerScore();       // 保存玩家分数
+    
+    // 网络模式支持
+    void SetNetworkMode(bool enabled) { isNetworkMode = enabled; }
+    bool IsNetworkMode() const { return isNetworkMode; }
+    void SetNetworkManager(NetworkManager* nm) { networkManager = nm; }
+    NetworkManager* GetNetworkManager() const { return networkManager; }
+    void SetupNetworkGame(int localPlayerId, bool useAI);  // 设置网络游戏
+    
+    // 网络游戏操作接收
+    void OnNetworkCallLandlord(int playerId, int score);
+    void OnNetworkDiscardCards(int playerId, const std::vector<int>& cards);
+    void OnNetworkPass(int playerId);
 
     Status GetStatus() const { return status; }
 
@@ -77,6 +91,11 @@ private:
     int baseScore;                 // 本局基础分
     int multiple;                  // 倍率
     int landlordCards[3];          // 三张地主牌
+    
+    // 网络模式
+    bool isNetworkMode;            // 是否为网络模式
+    NetworkManager* networkManager; // 网络管理器
+    int localPlayerId;             // 本地玩家ID
 };
 
 

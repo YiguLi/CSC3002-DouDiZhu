@@ -1,15 +1,19 @@
 #include "game.h"
+#include "networkmanager.h"
 
 #include <fstream>
 #include <iostream>
 #include <algorithm>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 
 Game::Game() : status(NotStart), landlord(nullptr),
     curPlayer(nullptr), lastPlayer(nullptr),
-    baseScore(0), multiple(1), questioned(0), callBegin(0) {
+    baseScore(0), multiple(1), questioned(0), callBegin(0),
+    isNetworkMode(false), networkManager(nullptr), localPlayerId(-1) {
     for (int i = 0; i < 3; ++i) {
-        players[i] = new Player(*this, i);
+        players[i] = new Player(*this, i, AIPlayer);  // 默认AI玩家
         callScores[i] = 0;
         landlordCards[i] = 0;
     }
@@ -97,13 +101,18 @@ void Game::CallLandlordPhase() {
         curPlayer = players[callBegin];
     }
 
-    // 如果当前玩家是人类,等待输入,不在这里处理
-    if (curPlayer->GetId() == 0) {
+    // 如果当前玩家是本地玩家,等待输入
+    if (curPlayer->IsLocalPlayer()) {
+        return;
+    }
+    
+    // 如果是网络玩家,等待网络消息
+    if (curPlayer->IsNetworkPlayer()) {
         return;
     }
 
     // AI玩家自动叫地主
-    if (curPlayer->GetId() != 0) {
+    if (curPlayer->IsAIPlayer()) {
         int maxScore = 0;
         for (int i = 0; i < questioned; ++i) {
             if (callScores[i] > maxScore) {
@@ -114,6 +123,14 @@ void Game::CallLandlordPhase() {
         int score = curPlayer->CallLandlord(questioned, maxScore);
         callScores[questioned] = score;
         qDebug() << "[CallLandlordPhase] AI 玩家" << curPlayer->GetId() << "叫分:" << score;
+        
+        // 网络模式且是房主，需要广播AI叫地主
+        if (isNetworkMode && networkManager && networkManager->IsHost()) {
+            QJsonObject actionData;
+            actionData["score"] = score;
+            networkManager->SendAIAction(curPlayer->GetId(), MSG_CALL_LANDLORD, actionData);
+            qDebug() << "[CallLandlordPhase] 广播AI玩家" << curPlayer->GetId() << "叫分:" << score;
+        }
 
         if (score == 3) {
             landlord = curPlayer;
@@ -162,10 +179,15 @@ void Game::PlayerCallLandlord(int score) {
 
     // 确保 curPlayer 已设置
     if (!curPlayer) {
-        curPlayer = players[0];
+        curPlayer = players[localPlayerId >= 0 ? localPlayerId : 0];
     }
 
-    if (curPlayer != players[0]) return;
+    if (!curPlayer->IsLocalPlayer()) return;
+    
+    // 网络模式下发送消息
+    if (isNetworkMode && networkManager) {
+        networkManager->SendCallLandlord(curPlayer->GetId(), score);
+    }
 
     callScores[questioned] = score;
 
@@ -208,17 +230,55 @@ void Game::DiscardPhase() {
 
     // 确保 curPlayer 不为空
     if (!curPlayer) return;
+    
+    // 本地玩家等待UI输入
+    if (curPlayer->IsLocalPlayer()) {
+        return;
+    }
+    
+    // 网络玩家等待网络消息
+    if (curPlayer->IsNetworkPlayer()) {
+        return;
+    }
 
     // AI玩家自动出牌
-    if (curPlayer != players[0]) {
+    if (curPlayer->IsAIPlayer()) {
         bool discarded = curPlayer->Discard();
         if (discarded) {
             lastPlayer = curPlayer;
+            
+            // 网络模式且是房主，需要广播AI操作
+            if (isNetworkMode && networkManager && networkManager->IsHost()) {
+                // 获取AI出的牌
+                const CardGroup& aiDiscard = curPlayer->GetLastDiscard();
+                std::vector<int> aiCards;
+                for (int card : aiDiscard.cards) {
+                    aiCards.push_back(card);
+                }
+                
+                // 发送AI出牌消息
+                QJsonObject actionData;
+                QJsonArray cardArray;
+                for (int card : aiCards) {
+                    cardArray.append(card);
+                }
+                actionData["cards"] = cardArray;
+                networkManager->SendAIAction(curPlayer->GetId(), MSG_DISCARD_CARDS, actionData);
+                
+                qDebug() << "[Game] 广播AI玩家" << curPlayer->GetId() << "出牌";
+            }
 
             // 检查是否赢了
             if (curPlayer->GetRemain() == 0) {
                 GameOverPhase();
                 return;
+            }
+        } else {
+            // AI选择不出（过牌）
+            if (isNetworkMode && networkManager && networkManager->IsHost()) {
+                QJsonObject actionData;
+                networkManager->SendAIAction(curPlayer->GetId(), MSG_PASS, actionData);
+                qDebug() << "[Game] 广播AI玩家" << curPlayer->GetId() << "过牌";
             }
         }
 
@@ -230,18 +290,24 @@ void Game::DiscardPhase() {
 bool Game::PlayerDiscard(const std::vector<int>& indices) {
     if (status != Status::Discard) return false;
     if (!curPlayer) return false;
-    if (curPlayer != players[0]) return false;
+    if (!curPlayer->IsLocalPlayer()) return false;
 
-    players[0]->SelectCards(indices);
+    Player* localPlayer = players[localPlayerId >= 0 ? localPlayerId : 0];
+    localPlayer->SelectCards(indices);
 
-    if (!players[0]->HumanDiscard()) {
+    if (!localPlayer->HumanDiscard()) {
         return false; // 出牌失败
     }
+    
+    // 网络模式下发送消息
+    if (isNetworkMode && networkManager) {
+        networkManager->SendDiscardCards(localPlayer->GetId(), indices);
+    }
 
-    lastPlayer = players[0];
+    lastPlayer = localPlayer;;
 
     // 是否胜利
-    if (players[0]->GetRemain() == 0) {
+    if (localPlayer->GetRemain() == 0) {
         GameOverPhase();
         return true;
     }
@@ -256,10 +322,17 @@ void Game::PlayerPass() {
 
     // 确保 curPlayer 已设置
     if (!curPlayer) return;
-    if (curPlayer != players[0]) return;
+    if (!curPlayer->IsLocalPlayer()) return;
     if (lastPlayer == curPlayer) return;  // 不能过自己的牌
 
-    players[0]->Pass();
+    Player* localPlayer = players[localPlayerId >= 0 ? localPlayerId : 0];
+    
+    // 网络模式下发送消息
+    if (isNetworkMode && networkManager) {
+        networkManager->SendPass(localPlayer->GetId());
+    }
+    
+    localPlayer->Pass();
     curPlayer = NextPlayer();
 }
 
@@ -268,9 +341,10 @@ void Game::PlayerHint() {
 
     // 确保 curPlayer 已设置
     if (!curPlayer) return;
-    if (curPlayer != players[0]) return;
+    if (!curPlayer->IsLocalPlayer()) return;
 
-    players[0]->Hint();
+    Player* localPlayer = players[localPlayerId >= 0 ? localPlayerId : 0];
+    localPlayer->Hint();
 }
 
 void Game::GameOverPhase() {
@@ -337,6 +411,91 @@ const CardGroup& Game::GetLastDiscard() const {
     }
     static CardGroup empty;
     return empty;
+}
+
+// 设置网络游戏
+void Game::SetupNetworkGame(int localId, bool useAI) {
+    localPlayerId = localId;
+    isNetworkMode = true;
+    
+    qDebug() << "[Game] 设置网络游戏，本地玩家ID:" << localId << "，使用AI:" << useAI;
+    
+    // 设置玩家类型
+    for (int i = 0; i < 3; ++i) {
+        if (i == localId) {
+            players[i]->SetPlayerType(LocalPlayer);
+            qDebug() << "[Game] 玩家" << i << "设为本地玩家";
+        } else if (useAI && i == 2) {
+            players[i]->SetPlayerType(AIPlayer);
+            qDebug() << "[Game] 玩家" << i << "设为AI玩家";
+        } else {
+            players[i]->SetPlayerType(NetworkPlayer);
+            qDebug() << "[Game] 玩家" << i << "设为网络玩家";
+        }
+    }
+}
+
+// 处理网络叫地主消息
+void Game::OnNetworkCallLandlord(int playerId, int score) {
+    qDebug() << "[Game] 收到网络叫地主消息: 玩家" << playerId << "叫分" << score;
+    
+    if (status != Status::GetLandlord) return;
+    if (playerId < 0 || playerId >= 3) return;
+    
+    callScores[questioned] = score;
+    
+    if (score == 3) {
+        landlord = players[playerId];
+        baseScore = 3;
+        status = Status::SendLandlordCard;
+    } else {
+        questioned++;
+        if (questioned < 3) {
+            curPlayer = NextPlayer();
+            CallLandlordPhase();
+        } else {
+            CallLandlordPhase();
+        }
+    }
+}
+
+// 处理网络出牌消息
+void Game::OnNetworkDiscardCards(int playerId, const std::vector<int>& cards) {
+    qDebug() << "[Game] 收到网络出牌消息: 玩家" << playerId << "出" << cards.size() << "张牌";
+    
+    if (status != Status::Discard) return;
+    if (playerId < 0 || playerId >= 3) return;
+    
+    Player* player = players[playerId];
+    if (!player) return;
+    
+    // 选择牌并出牌
+    player->SelectCards(cards);
+    if (player->HumanDiscard()) {
+        lastPlayer = player;
+        
+        // 检查胜利
+        if (player->GetRemain() == 0) {
+            GameOverPhase();
+            return;
+        }
+        
+        curPlayer = NextPlayer();
+    }
+}
+
+// 处理网络过牌消息
+void Game::OnNetworkPass(int playerId) {
+    qDebug() << "[Game] 收到网络过牌消息: 玩家" << playerId;
+    
+    if (status != Status::Discard) return;
+    if (playerId < 0 || playerId >= 3) return;
+    
+    Player* player = players[playerId];
+    if (!player) return;
+    
+    player->Pass();
+    curPlayer = NextPlayer();
 }
 
 

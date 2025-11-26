@@ -17,7 +17,7 @@ public:
 
 private slots:
     void on_start_clicked();
-
+    void on_online_clicked();
     void on_exit_clicked();
 
 private:

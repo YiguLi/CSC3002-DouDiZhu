@@ -12,6 +12,15 @@
 class Game;
 
 /**
+ * 玩家类型枚举
+ */
+enum PlayerType {
+    LocalPlayer,    // 本地玩家（人类）
+    NetworkPlayer,  // 网络玩家（其他联机玩家）
+    AIPlayer        // AI玩家
+};
+
+/**
  * 玩家类
  * 管理玩家手牌、出牌逻辑、AI策略
  */
@@ -19,13 +28,20 @@ class Player {
     friend class Game;
 
 public:
-    Player(Game& game, int id);
+    Player(Game& game, int id, PlayerType type = AIPlayer);
 
     void NewGame();                    // 新游戏初始化
     void AddCard(int num);             // 添加一张牌到手牌
     int GetRemain() const;             // 获取剩余牌数
     int GetScore() const { return score; }
     void AddScore(int s) { score += s; }
+    
+    // 玩家类型相关
+    PlayerType GetPlayerType() const { return playerType; }
+    void SetPlayerType(PlayerType type) { playerType = type; }
+    bool IsLocalPlayer() const { return playerType == LocalPlayer; }
+    bool IsNetworkPlayer() const { return playerType == NetworkPlayer; }
+    bool IsAIPlayer() const { return playerType == AIPlayer; }
 
     // 叫地主相关
     int CallLandlord(int questioned, int maxScore);
@@ -58,7 +74,8 @@ private:
     void OnSelectionChanged();         // 选牌变化时回调（分析缓存）
 
     Game& game;
-    int playerId;                      // 玩家ID: 0=人类, 1=电脑1, 2=电脑2
+    int playerId;                      // 玩家ID: 按加入顺序分配(0=房主, 1=第一个加入, 2=第二个加入或AI)
+    PlayerType playerType;             // 玩家类型: LocalPlayer/NetworkPlayer/AIPlayer
     int score;                         // 玩家分数
     std::multiset<int> cards;          // 手牌（允许重复，例如有两张3）
     CardGroup selection;               // 选中的牌
