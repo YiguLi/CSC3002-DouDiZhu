@@ -394,9 +394,29 @@ void InGameScene::setupUIForCurrentGame()
 
         Player* cur = m_gamePtr->GetCurrentPlayer();
 
-        if (cur->IsLocalPlayer()) {
+        
 
-            qDebug() << "[setupUIForCurrentGame] 轮到本地玩家叫分数";
+        // 网络模式下，需要检查 curPlayer 是否是本地玩家
+
+        int localPlayerId = 0;
+
+        if (m_gamePtr->IsNetworkMode() && m_gamePtr->GetNetworkManager()) {
+
+            localPlayerId = m_gamePtr->GetNetworkManager()->GetLocalPlayerId();
+
+        }
+
+        
+
+        bool isLocalPlayerTurn = cur->IsLocalPlayer() || 
+
+                                 (m_gamePtr->IsNetworkMode() && cur->GetId() == localPlayerId);
+
+        
+
+        if (isLocalPlayerTurn) {
+
+            qDebug() << "[setupUIForCurrentGame] 轮到本地玩家" << cur->GetId() << "叫分数";
 
             setStatusText("Status: You Call!");
 
