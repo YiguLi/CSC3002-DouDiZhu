@@ -664,6 +664,6 @@ void Player::SetHandCards(const std::vector<int>& handCards) {
     for (int card : handCards) {
         cards.insert(card);
     }
-    AnalyseCards();  // 重新分析手牌
+    // 手牌已设置，无需特别分析（按需分析即可）
 }
 
