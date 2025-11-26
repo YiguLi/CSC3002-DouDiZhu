@@ -310,43 +310,45 @@ void InGameScene::setupUIForCurrentGame()
 
 
 
-    // 4. ?AI 先叫到轮到玩?0 为止
+    // 4. 让AI先叫到轮到玩家0为止（仅单机模式）
 
-    while (m_gamePtr->GetStatus() == Status::GetLandlord &&
+    if (!m_gamePtr->IsNetworkMode()) {
 
-           m_gamePtr->GetCurrentPlayer() &&
+        while (m_gamePtr->GetStatus() == Status::GetLandlord &&
 
-           m_gamePtr->GetCurrentPlayer()->GetId() != 0)
+               m_gamePtr->GetCurrentPlayer() &&
 
-    {
-
-        qDebug() << "[init] AI" << m_gamePtr->GetCurrentPlayer()->GetId() << "正在叫分数...";
-
-        setStatusText("Status: AI calling...");
-
-        m_gamePtr->CallLandlordPhase();
-
-
-
-        // 如果 AI 叫分数后已经确定地主，直接进入发地主牌阶段
-
-        if (m_gamePtr->GetStatus() == Status::SendLandlordCard)
+               m_gamePtr->GetCurrentPlayer()->GetId() != 0)
 
         {
 
-            qDebug() << "[init] AI 已决定地主，发地主牌";
+            qDebug() << "[init] AI" << m_gamePtr->GetCurrentPlayer()->GetId() << "正在叫分数...";
 
-            setStatusText("Status: Game start!");
+            setStatusText("Status: AI calling...");
 
-            m_gamePtr->SendLandlordCard();
+            m_gamePtr->CallLandlordPhase();
 
-            createLandlordPanels(true);
 
-            refreshPlayer0HandPanels();
 
-            hideCallButtons();
+            // 如果 AI 叫分数后已经确定地主，直接进入发地主牌阶段
 
-            enterDiscardPhase();
+            if (m_gamePtr->GetStatus() == Status::SendLandlordCard)
+
+            {
+
+                qDebug() << "[init] AI 已决定地主，发地主牌";
+
+                setStatusText("Status: Game start!");
+
+                m_gamePtr->SendLandlordCard();
+
+                createLandlordPanels(true);
+
+                refreshPlayer0HandPanels();
+
+                hideCallButtons();
+
+                enterDiscardPhase();
 
             return;
 
@@ -354,29 +356,69 @@ void InGameScene::setupUIForCurrentGame()
 
     }
 
+    }
 
 
-    // 5. 如果轮到玩家 0，显示)叫分数按?
+
+    // 5. 如果轮到本地玩家，显示叫分数按钮
 
     if (m_gamePtr->GetStatus() == Status::GetLandlord &&
 
-        m_gamePtr->GetCurrentPlayer() &&
-
-        m_gamePtr->GetCurrentPlayer()->GetId() == 0)
+        m_gamePtr->GetCurrentPlayer())
 
     {
 
-        qDebug() << "[setupUIForCurrentGame] 轮到玩家 0 叫分数";
+        Player* cur = m_gamePtr->GetCurrentPlayer();
 
-        setStatusText("Status: You Call!");
+        if (cur->IsLocalPlayer()) {
 
-        ui->btn_notcall->show();
+            qDebug() << "[setupUIForCurrentGame] 轮到本地玩家叫分数";
 
-        ui->btn_1p->show();
+            setStatusText("Status: You Call!");
 
-        ui->btn_2p->show();
+            ui->btn_notcall->show();
 
-        ui->btn_3p->show();
+            ui->btn_1p->show();
+
+            ui->btn_2p->show();
+
+            ui->btn_3p->show();
+
+        } else if (m_gamePtr->IsNetworkMode()) {
+
+            // 网络模式下，非本地玩家的回合
+
+            if (cur->IsAIPlayer()) {
+
+                // AI玩家，房主负责执行
+
+                if (m_gamePtr->GetNetworkManager() && m_gamePtr->GetNetworkManager()->IsHost()) {
+
+                    qDebug() << "[setupUIForCurrentGame] 网络模式：AI" << cur->GetId() << "开始叫地主";
+
+                    QTimer::singleShot(1000, this, [this]() {
+
+                        if (m_gamePtr->GetStatus() == Status::GetLandlord) {
+
+                            m_gamePtr->CallLandlordPhase();
+
+                        }
+
+                    });
+
+                }
+
+            } else {
+
+                // 网络玩家，等待网络消息
+
+                qDebug() << "[setupUIForCurrentGame] 等待网络玩家" << cur->GetId() << "叫地主";
+
+                setStatusText(QString("Status: Player %1 calling...").arg(cur->GetId()));
+
+            }
+
+        }
 
     }
 
