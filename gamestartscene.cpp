@@ -52,6 +52,13 @@ void Gamestartscene::on_online_clicked()
         bool useAI = (networkManager->GetPlayerCount() == 2);
         game->SetupNetworkGame(networkManager->GetLocalPlayerId(), useAI);
         
+        // 连接游戏状态接收（客户端）
+        connect(networkManager, &NetworkManager::gameStateReceived,
+                [=](const QJsonObject& gameState) {
+            qDebug() << "[GameStartScene] 客户端收到游戏状态，应用到Game";
+            game->ApplyGameState(gameState);
+        });
+        
         // 连接网络事件到游戏
         connect(networkManager, &NetworkManager::callLandlordReceived, 
                 [=](int playerId, int score) {
@@ -84,8 +91,15 @@ void Gamestartscene::on_online_clicked()
             }
         });
         
-        // 启动游戏
-        game->GameStart();
+        // 房主：启动游戏并广播状态；客户端：等待游戏状态
+        if (networkManager->IsHost()) {
+            qDebug() << "[GameStartScene] 房主启动游戏并广播状态";
+            game->GameStart();
+            networkManager->BroadcastGameState(game);
+        } else {
+            qDebug() << "[GameStartScene] 客户端等待游戏状态同步...";
+            // 客户端不调用GameStart，等待gameStateReceived后由UI刷新
+        }
         
         // 创建游戏界面（使用外部Game实例）
         InGameScene* gameScene = new InGameScene(game);

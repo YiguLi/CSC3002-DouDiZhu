@@ -435,6 +435,38 @@ void Game::SetupNetworkGame(int localId, bool useAI) {
     }
 }
 
+// 应用游戏状态（客户端接收房主的游戏状态）
+void Game::ApplyGameState(const QJsonObject& gameState) {
+    qDebug() << "[Game] 应用游戏状态";
+    
+    // 应用每个玩家的手牌
+    for (int i = 0; i < 3; ++i) {
+        QJsonArray handCardsArray = gameState[QString("player%1Cards").arg(i)].toArray();
+        std::vector<int> handCards;
+        for (const QJsonValue& v : handCardsArray) {
+            handCards.push_back(v.toInt());
+        }
+        players[i]->SetHandCards(handCards);
+        qDebug() << "[Game] 玩家" << i << "手牌数:" << handCards.size();
+    }
+    
+    // 应用三张地主牌
+    QJsonArray landlordCardsArray = gameState["landlordCards"].toArray();
+    for (int i = 0; i < 3 && i < landlordCardsArray.size(); ++i) {
+        landlordCards[i] = landlordCardsArray[i].toInt();
+    }
+    qDebug() << "[Game] 地主牌已设置";
+    
+    // 应用游戏状态
+    status = (Status)gameState["status"].toInt();
+    int currentPlayerId = gameState["currentPlayerId"].toInt();
+    if (currentPlayerId >= 0 && currentPlayerId < 3) {
+        curPlayer = players[currentPlayerId];
+    }
+    
+    qDebug() << "[Game] 游戏状态:" << status << "，当前玩家:" << currentPlayerId;
+}
+
 // 处理网络叫地主消息
 void Game::OnNetworkCallLandlord(int playerId, int score) {
     qDebug() << "[Game] 收到网络叫地主消息: 玩家" << playerId << "叫分" << score;

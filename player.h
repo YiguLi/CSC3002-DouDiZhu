@@ -59,6 +59,8 @@ public:
     void ClearSelection();             // 清空选牌
 
     const std::multiset<int>& GetCards() const { return cards; }
+    std::vector<int> GetHandCards() const;  // 获取手牌向量（用于网络同步）
+    void SetHandCards(const std::vector<int>& handCards);  // 设置手牌（用于网络同步）
     const CardGroup& GetSelection() const { return selection; }
     const CardGroup& GetLastDiscard() const { return discard; }
 

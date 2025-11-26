@@ -645,7 +645,25 @@ std::vector<CardGroup> Player::Hint() {
 }
 
 void Player::OnSelectionChanged() {
-    // 选牌改变时立即分析，形成“缓存”
+    // 选牌改变时立即分析，形成"缓存"
     AnalyseSelection();
+}
+
+// 获取手牌向量（用于网络同步）
+std::vector<int> Player::GetHandCards() const {
+    std::vector<int> handCards;
+    for (int card : cards) {
+        handCards.push_back(card);
+    }
+    return handCards;
+}
+
+// 设置手牌（用于网络同步）
+void Player::SetHandCards(const std::vector<int>& handCards) {
+    cards.clear();
+    for (int card : handCards) {
+        cards.insert(card);
+    }
+    AnalyseCards();  // 重新分析手牌
 }
 

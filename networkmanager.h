@@ -64,6 +64,7 @@ public:
     void StartGame();                             // 开始游戏（仅房主）
     
     // 游戏操作同步
+    void BroadcastGameState(Game* game);              // 广播游戏状态（仅房主）
     void SendCallLandlord(int playerId, int score);      // 发送叫地主
     void SendDiscardCards(int playerId, const std::vector<int>& cards);  // 发送出牌
     void SendPass(int playerId);                  // 发送过牌
@@ -89,6 +90,7 @@ signals:
     void gameStartRequested();
     
     // 游戏事件
+    void gameStateReceived(const QJsonObject& gameState);  // 接收游戏状态
     void callLandlordReceived(int playerId, int score);
     void discardCardsReceived(int playerId, const std::vector<int>& cards);
     void passReceived(int playerId);
@@ -115,6 +117,7 @@ private:
     void HandleJoinRoom(QTcpSocket* socket, const QJsonObject& message);
     void HandlePlayerReady(QTcpSocket* socket, const QJsonObject& message);
     void HandleGameStart(QTcpSocket* socket, const QJsonObject& message);
+    void HandleGameState(QTcpSocket* socket, const QJsonObject& message);
     void HandleCallLandlord(QTcpSocket* socket, const QJsonObject& message);
     void HandleDiscardCards(QTcpSocket* socket, const QJsonObject& message);
     void HandlePass(QTcpSocket* socket, const QJsonObject& message);

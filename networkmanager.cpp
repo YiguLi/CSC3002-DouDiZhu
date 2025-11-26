@@ -144,7 +144,7 @@ void NetworkManager::StartGame() {
     gameStarted = true;
     
     qDebug() << "[NetworkManager] 游戏开始，使用AI:" << useAI;
-    emit gameStartRequested();
+    // 注意：房主会在外部lambda中调用GameStart，然后调用BroadcastGameState
 }
 
 void NetworkManager::SendCallLandlord(int playerId, int score) {
@@ -292,6 +292,9 @@ void NetworkManager::ProcessMessage(QTcpSocket* socket, const QJsonObject& messa
     case MSG_GAME_START:
         HandleGameStart(socket, message);
         break;
+    case MSG_GAME_STATE:
+        HandleGameState(socket, message);
+        break;
     case MSG_CALL_LANDLORD:
         HandleCallLandlord(socket, message);
         break;
@@ -394,8 +397,8 @@ void NetworkManager::HandleGameStart(QTcpSocket* socket, const QJsonObject& mess
     useAI = message["useAI"].toBool();
     gameStarted = true;
     
-    qDebug() << "[NetworkManager] 收到游戏开始消息，使用AI:" << useAI;
-    emit gameStartRequested();
+    qDebug() << "[NetworkManager] 收到游戏开始消息，使用AI:" << useAI << "，等待游戏状态同步...";
+    // 客户端不立即发出gameStartRequested，而是等待MSG_GAME_STATE
 }
 
 void NetworkManager::HandleCallLandlord(QTcpSocket* socket, const QJsonObject& message) {
@@ -448,4 +451,51 @@ void NetworkManager::HandleAIAction(QTcpSocket* socket, const QJsonObject& messa
     
     qDebug() << "[NetworkManager] 收到AI操作: AI" << aiId << "类型" << actionType;
     emit aiActionReceived(aiId, actionType, actionData);
+}
+
+void NetworkManager::BroadcastGameState(Game* game) {
+    if (!isHost || !game) {
+        qDebug() << "[NetworkManager] BroadcastGameState: 不是房主或game为空";
+        return;
+    }
+    
+    QJsonObject msg = CreateMessage(MSG_GAME_STATE);
+    
+    // 同步每个玩家的手牌
+    for (int i = 0; i < 3; i++) {
+        Player* player = game->GetPlayer(i);
+        if (player) {
+            QJsonArray handCards;
+            const std::vector<int>& cards = player->GetHandCards();
+            for (int card : cards) {
+                handCards.append(card);
+            }
+            msg[QString("player%1Cards").arg(i)] = handCards;
+        }
+    }
+    
+    // 同步三张地主牌
+    QJsonArray landlordCardsArray;
+    for (int i = 0; i < 3; i++) {
+        landlordCardsArray.append(game->GetLandlordCard(i));
+    }
+    msg["landlordCards"] = landlordCardsArray;
+    
+    // 同步游戏状态信息
+    msg["status"] = (int)game->GetStatus();
+    msg["currentPlayerId"] = game->GetCurrentPlayer() ? game->GetCurrentPlayer()->GetId() : -1;
+    msg["useAI"] = useAI;
+    
+    qDebug() << "[NetworkManager] 广播游戏状态，当前玩家:" << msg["currentPlayerId"].toInt();
+    BroadcastMessage(msg);
+}
+
+void NetworkManager::HandleGameState(QTcpSocket* socket, const QJsonObject& message) {
+    qDebug() << "[NetworkManager] 收到游戏状态同步";
+    
+    // 发出信号，让外部处理游戏状态应用
+    emit gameStateReceived(message);
+    
+    // 现在可以发出gameStartRequested信号了
+    emit gameStartRequested();
 }

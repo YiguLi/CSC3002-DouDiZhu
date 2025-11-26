@@ -2,6 +2,7 @@
 #define GAME_H
 
 #include <string>
+#include <QJsonObject>
 #include "cards.h"
 #include "player.h"
 
@@ -40,6 +41,7 @@ public:
     void SetNetworkManager(NetworkManager* nm) { networkManager = nm; }
     NetworkManager* GetNetworkManager() const { return networkManager; }
     void SetupNetworkGame(int localPlayerId, bool useAI);  // 设置网络游戏
+    void ApplyGameState(const QJsonObject& gameState);     // 应用游戏状态（客户端）
     
     // 网络游戏操作接收
     void OnNetworkCallLandlord(int playerId, int score);
